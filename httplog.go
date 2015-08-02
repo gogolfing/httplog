@@ -2,58 +2,103 @@ package httplog
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
 const (
-	NANOS_PER_MICROS = 1000000.0
+	NanosPerMicros = 1000000.0
 )
 
-type context struct {
-	method    string
-	path      string
-	startTime time.Time
-	status    int
-	size      int
-	http.ResponseWriter
-}
-
-func (c *context) Write(data []byte) (int, error) {
-	c.size += len(data)
-	return c.ResponseWriter.Write(data)
-}
-
-func (c *context) WriteHeader(status int) {
-	c.status = status
-	c.ResponseWriter.WriteHeader(status)
-}
-
 func Middleware(h http.Handler) http.Handler {
+	l := &Logger{}
+	return l.Middleware(h)
+}
+
+type ContextCreator func(w http.ResponseWriter, r *http.Request) *Context
+
+type ContextFormatter func(*Context) string
+
+type Logger struct {
+	Creator   ContextCreator
+	Formatter ContextFormatter
+	io.Writer
+}
+
+func (l *Logger) Middleware(h http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, r *http.Request) {
-		c := &context{
-			r.Method,
-			r.URL.Path,
-			time.Now(),
-			0,
-			0,
-			w,
-		}
+		c := l.newContext(w, r)
 		h.ServeHTTP(c, r)
-		c.finish()
+		c.update()
+		l.writeContext(c)
 	}
 	return http.HandlerFunc(f)
 }
 
-func (c *context) finish() {
-	c.writeLog()
-	c.ResponseWriter = nil
+func (l *Logger) newContext(w http.ResponseWriter, r *http.Request) *Context {
+	if l.Creator != nil {
+		return l.Creator(w, r)
+	}
+	return NewContext(w, r)
 }
 
-func (c *context) writeLog() {
-	if c.status == 0 {
-		c.status = 200
+func (l *Logger) writeContext(c *Context) {
+	fmt.Fprintln(l.getWriter(), l.getResult(c))
+}
+
+func (l *Logger) getWriter() io.Writer {
+	if l.Writer != nil {
+		return l.Writer
 	}
-	ms := float64(time.Since(c.startTime).Nanoseconds()) / NANOS_PER_MICROS
-	fmt.Printf("%v %v %v %vB %.4fms\n", c.method, c.path, c.status, c.size, ms)
+	return os.Stdout
+}
+
+func (l *Logger) getResult(c *Context) string {
+	if l.Formatter != nil {
+		return l.Formatter(c)
+	}
+	return "NEED TO IMPLEMENT"
+}
+
+type Context struct {
+	http.ResponseWriter
+
+	Request   *http.Request
+	Path      string
+	Ident     string
+	User      string
+	TimeStart time.Time
+	TimeDone  time.Time
+	Status    int
+	Size      int
+}
+
+func NewContext(w http.ResponseWriter, r *http.Request) *Context {
+	return &Context{
+		ResponseWriter: w,
+		Request:        r,
+		Path:           r.URL.Path,
+		TimeStart:      time.Now(),
+		TimeDone:       time.Now(),
+	}
+}
+
+func (c *Context) Write(data []byte) (int, error) {
+	size, err := c.ResponseWriter.Write(data)
+	c.Size += size
+	return size, err
+}
+
+func (c *Context) WriteHeader(status int) {
+	c.Status = status
+	c.ResponseWriter.WriteHeader(c.Status)
+}
+
+func (c *Context) update() {
+	c.TimeDone = time.Now()
+	if c.Status == 0 {
+		c.Status = http.StatusOK
+	}
 }
