@@ -1,0 +1,21 @@
+language: go
+
+go:
+  - tip
+
+before_install:
+  - go get github.com/axw/gocov/gocov
+  - go get github.com/mattn/goveralls
+  - go get golang.org/x/tools/cmd/cover
+
+script:
+  - go test -covermode count -v -coverprofile profile.cov .
+  - $HOME/gopath/bin/gocov convert *.cov > profile.cov.json
+  - $HOME/gopath/bin/goveralls -gocovdata profile.cov.json -repotoken $COVERALLS_TOKEN -service travis-ci
+
+notifications:
+  email:
+    recipients:
+      - eric.elsken@gmail.com
+    on_success: change
+    on_failure: always
