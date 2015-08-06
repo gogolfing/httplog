@@ -1,9 +1,14 @@
 package common
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gogolfing/httplog"
+)
+
+const (
+	CommonLogDateFormat = "02/Jan/2006:15:04:05 -0700"
 )
 
 type Indentity func(r *http.Request) string
@@ -39,6 +44,36 @@ func NewCreator(i Indentity, au AuthUser) httplog.ContextCreator {
 	return f
 }
 
+func CombinedFormatContext(c *httplog.Context) string {
+	return fmt.Sprintf(`%s "%s" "%s"`,
+		FormatContext(c),
+		c.Request.Header.Get("Referer"),
+		c.Request.Header.Get("User-Agent"),
+	)
+}
+
 func FormatContext(c *httplog.Context) string {
-	return "this is supposed to be common log format"
+	identity := c.Identity
+	if len(identity) == 0 {
+		identity = "-"
+	}
+	authUser := c.AuthUser
+	if len(authUser) == 0 {
+		authUser = "-"
+	}
+	uri := c.Path
+	if len(c.Request.URL.RawQuery) > 0 {
+		uri += "?" + c.Request.URL.RawQuery
+	}
+	return fmt.Sprintf(`%s %s %s [%s] "%s %s %s" %d %d`,
+		c.Request.RemoteAddr,
+		identity,
+		authUser,
+		c.TimeDone.Format(CommonLogDateFormat),
+		c.Request.Method,
+		uri,
+		c.Request.Proto,
+		c.Status,
+		c.Size,
+	)
 }
