@@ -4,13 +4,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	"sync"
 	"time"
 )
 
 const (
 	NanosPerMicros = 1000000.0
 )
+
+var DefaultCreator ContextCreator = NewContext
+
+var DefaultFormatter ContextFormatter = FormatContext
 
 func Middleware(h http.Handler) http.Handler {
 	l := &Logger{}
@@ -21,10 +25,32 @@ type ContextCreator func(w http.ResponseWriter, r *http.Request) *Context
 
 type ContextFormatter func(*Context) string
 
+type Printer interface {
+	Print(...interface{})
+}
+
+type WriterPrinter struct {
+	*sync.Mutex
+	io.Writer
+}
+
+func NewWriterPrinter(w io.Writer) Printer {
+	return &WriterPrinter{
+		&sync.Mutex{},
+		w,
+	}
+}
+
+func (wp *WriterPrinter) Print(v ...interface{}) {
+	wp.Lock()
+	defer wp.Unlock()
+	fmt.Fprint(wp, v...)
+}
+
 type Logger struct {
 	Creator   ContextCreator
 	Formatter ContextFormatter
-	io.Writer
+	Printer
 }
 
 func (l *Logger) Middleware(h http.Handler) http.Handler {
@@ -41,25 +67,18 @@ func (l *Logger) newContext(w http.ResponseWriter, r *http.Request) *Context {
 	if l.Creator != nil {
 		return l.Creator(w, r)
 	}
-	return NewContext(w, r)
+	return DefaultCreator(w, r)
 }
 
 func (l *Logger) writeContext(c *Context) {
-	fmt.Fprintln(l.getWriter(), l.getResult(c))
-}
-
-func (l *Logger) getWriter() io.Writer {
-	if l.Writer != nil {
-		return l.Writer
-	}
-	return os.Stdout
+	l.Print(l.getResult(c))
 }
 
 func (l *Logger) getResult(c *Context) string {
 	if l.Formatter != nil {
 		return l.Formatter(c)
 	}
-	return "NEED TO IMPLEMENT"
+	return DefaultFormatter(c)
 }
 
 type Context struct {
@@ -83,6 +102,11 @@ func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 		TimeStart:      time.Now(),
 		TimeDone:       time.Now(),
 	}
+}
+
+func FormatContext(c *Context) string {
+	ms := float64(c.TimeDone.Sub(c.TimeStart).Nanoseconds()) / NanosPerMicros
+	return fmt.Sprintf("%v %v %v %vB %.4fms\n", c.Request.Method, c.Path, c.Status, c.Size, ms)
 }
 
 func (c *Context) Write(data []byte) (int, error) {
