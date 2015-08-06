@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -71,6 +72,9 @@ func (l *Logger) newContext(w http.ResponseWriter, r *http.Request) *Context {
 }
 
 func (l *Logger) writeContext(c *Context) {
+	if l.Printer == nil {
+		l.Printer = NewWriterPrinter(os.Stdout)
+	}
 	l.Print(l.getResult(c))
 }
 
