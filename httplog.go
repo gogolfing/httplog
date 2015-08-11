@@ -92,21 +92,21 @@ func (l *Logger) getResult(c *Context) string {
 type Context struct {
 	http.ResponseWriter
 
-	Request   *http.Request
-	Path      string
-	Identity  string
-	AuthUser  string
-	TimeStart time.Time
-	TimeDone  time.Time
-	Status    int
-	Size      int
+	Request    *http.Request
+	RequestURI string
+	Identity   string
+	AuthUser   string
+	TimeStart  time.Time
+	TimeDone   time.Time
+	Status     int
+	Size       int
 }
 
 func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 	return &Context{
 		ResponseWriter: w,
 		Request:        r,
-		Path:           r.URL.Path,
+		RequestURI:     r.URL.RequestURI(),
 		TimeStart:      time.Now(),
 		TimeDone:       time.Now(),
 	}
@@ -114,7 +114,7 @@ func NewContext(w http.ResponseWriter, r *http.Request) *Context {
 
 func FormatContext(c *Context) string {
 	ms := float64(c.TimeDone.Sub(c.TimeStart).Nanoseconds()) / NanosPerMicros
-	return fmt.Sprintf("%v %v %v %vB %.4fms\n", c.Request.Method, c.Path, c.Status, c.Size, ms)
+	return fmt.Sprintf("%v %v %v %vB %.4fms\n", c.Request.Method, c.RequestURI, c.Status, c.Size, ms)
 }
 
 func (c *Context) Write(data []byte) (int, error) {

@@ -61,17 +61,13 @@ func FormatContext(c *httplog.Context) string {
 	if len(authUser) == 0 {
 		authUser = "-"
 	}
-	uri := c.Path
-	if len(c.Request.URL.RawQuery) > 0 {
-		uri += "?" + c.Request.URL.RawQuery
-	}
 	return fmt.Sprintf(`%s %s %s [%s] "%s %s %s" %d %d`,
 		c.Request.RemoteAddr,
 		identity,
 		authUser,
 		c.TimeDone.Format(CommonLogDateFormat),
 		c.Request.Method,
-		uri,
+		c.RequestURI,
 		c.Request.Proto,
 		c.Status,
 		c.Size,
