@@ -1,136 +1,88 @@
 package httplog
 
 import (
-	"fmt"
-	"io"
+	"context"
 	"net/http"
-	"os"
-	"sync"
 	"time"
 )
 
-const (
-	NanosPerMicros = 1000000.0
-)
+type key int
 
-func Middleware(h http.Handler) http.Handler {
-	l := &Logger{}
-	return l.Middleware(h)
+const responseWriterKey key = 0
+
+type Logger interface {
+	AfterServeHTTP(*ResponseWriter)
 }
 
-type ContextCreator func(w http.ResponseWriter, r *http.Request) *Context
-
-type ContextFormatter func(*Context) string
-
-type Printer interface {
-	Println(...interface{})
-}
-
-type WriterPrinter struct {
-	*sync.Mutex
-	io.Writer
-}
-
-func NewWriterPrinter(w io.Writer) Printer {
-	return &WriterPrinter{
-		&sync.Mutex{},
-		w,
-	}
-}
-
-func (wp *WriterPrinter) Println(v ...interface{}) {
-	wp.Lock()
-	defer wp.Unlock()
-	fmt.Fprintln(wp, v...)
-}
-
-type Logger struct {
-	Creator   ContextCreator
-	Formatter ContextFormatter
-	Printer
-}
-
-func NewLogger(c ContextCreator, f ContextFormatter, p Printer) *Logger {
-	return &Logger{
-		Creator:   c,
-		Formatter: f,
-		Printer:   p,
-	}
-}
-
-func (l *Logger) Middleware(h http.Handler) http.Handler {
+func Middleware(logger Logger, next http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, r *http.Request) {
-		c := l.newContext(w, r)
-		h.ServeHTTP(c, r)
-		c.update()
-		l.writeContext(c)
+		rw := &ResponseWriter{
+			ResponseWriter: w,
+			RequestURI:     r.URL.RequestURI(),
+			Start:          now(),
+			Done:           now(),
+		}
+		ctx := newContextWithResponseWriter(r.Context(), rw)
+
+		next.ServeHTTP(rw, r.WithContext(ctx))
+
+		rw.Done = now()
+		logger.AfterServeHTTP(rw)
 	}
 	return http.HandlerFunc(f)
 }
 
-func (l *Logger) newContext(w http.ResponseWriter, r *http.Request) *Context {
-	if l.Creator != nil {
-		return l.Creator(w, r)
-	}
-	return NewContext(w, r)
+func newContextWithResponseWriter(ctx context.Context, rw *ResponseWriter) context.Context {
+	return context.WithValue(ctx, responseWriterKey, rw)
 }
 
-func (l *Logger) writeContext(c *Context) {
-	if l.Printer == nil {
-		l.Printer = NewWriterPrinter(os.Stdout)
-	}
-	l.Println(l.getResult(c))
+func WithValue(r *http.Request, key, value interface{}) {
+	rw := responseWriterFromContext(r.Context())
+	rw.putValue(key, value)
 }
 
-func (l *Logger) getResult(c *Context) string {
-	if l.Formatter != nil {
-		return l.Formatter(c)
-	}
-	return FormatContext(c)
+func responseWriterFromContext(ctx context.Context) *ResponseWriter {
+	return ctx.Value(responseWriterKey).(*ResponseWriter)
 }
 
-type Context struct {
+type ResponseWriter struct {
 	http.ResponseWriter
 
-	Request    *http.Request
 	RequestURI string
-	Identity   string
-	AuthUser   string
-	TimeStart  time.Time
-	TimeDone   time.Time
-	Status     int
-	Size       int
+
+	Start time.Time
+	Done  time.Time
+
+	Status int
+	Size   uint64
+
+	values map[interface{}]interface{}
 }
 
-func NewContext(w http.ResponseWriter, r *http.Request) *Context {
-	return &Context{
-		ResponseWriter: w,
-		Request:        r,
-		RequestURI:     r.URL.RequestURI(),
-		TimeStart:      time.Now(),
-		TimeDone:       time.Now(),
-	}
-}
-
-func FormatContext(c *Context) string {
-	ms := float64(c.TimeDone.Sub(c.TimeStart).Nanoseconds()) / NanosPerMicros
-	return fmt.Sprintf("%v %v %v %vB %.4fms\n", c.Request.Method, c.RequestURI, c.Status, c.Size, ms)
-}
-
-func (c *Context) Write(data []byte) (int, error) {
-	size, err := c.ResponseWriter.Write(data)
-	c.Size += size
+func (r *ResponseWriter) Write(p []byte) (n int, err error) {
+	size, err := r.ResponseWriter.Write(p)
+	r.Size += uint64(size)
 	return size, err
 }
 
-func (c *Context) WriteHeader(status int) {
-	c.Status = status
-	c.ResponseWriter.WriteHeader(c.Status)
+func (r *ResponseWriter) WriteHeader(status int) {
+	r.Status = status
+	r.ResponseWriter.WriteHeader(status)
 }
 
-func (c *Context) update() {
-	c.TimeDone = time.Now()
-	if c.Status == 0 {
-		c.Status = http.StatusOK
-	}
+func (r *ResponseWriter) Duration() time.Duration {
+	return r.Done.Sub(r.Start)
 }
+
+func (r *ResponseWriter) putValue(key, value interface{}) {
+	if r.values == nil {
+		r.values = map[interface{}]interface{}{}
+	}
+	r.values[key] = value
+}
+
+func (r *ResponseWriter) Value(key interface{}) interface{} {
+	return r.values[key]
+}
+
+var now func() time.Time = time.Now
