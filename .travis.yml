@@ -1,21 +1,20 @@
 language: go
 
 go:
-  - tip
-
-before_install:
-  - go get github.com/axw/gocov/gocov
-  - go get github.com/mattn/goveralls
-  - go get golang.org/x/tools/cmd/cover
-
-script:
-  - go test -covermode count -v -coverprofile profile.cov .
-  - $HOME/gopath/bin/gocov convert *.cov > profile.cov.json
-  - $HOME/gopath/bin/goveralls -gocovdata profile.cov.json -repotoken $COVERALLS_TOKEN -service travis-ci
+  - 1.7.3
 
 notifications:
   email:
     recipients:
-      - eric.elsken@gmail.com
+        - eric.elsken@gmail.com
     on_success: change
-    on_failure: always
+    on_failure: change
+
+install:
+  - ./bin/travis/install.sh
+
+script:
+  - ./bin/travis/test_coverage.sh
+
+after_success:
+  - ./bin/coveralls/push.sh
