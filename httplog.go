@@ -1,3 +1,5 @@
+//Package httplog provides a Middleware function along with an http.ResponseWriter
+//implementation that records response data for processing after a Request is complete.
 package httplog
 
 import (
