@@ -10,7 +10,7 @@ import (
 
 var TimeOne = time.Now()
 
-func TestMiddleware(t *testing.T) {
+func TestMiddleware_SetStatus(t *testing.T) {
 	oldNow := now
 	defer func() {
 		now = oldNow
@@ -24,7 +24,7 @@ func TestMiddleware(t *testing.T) {
 		RequestURI: "/path",
 		Start:      TimeOne,
 		Done:       TimeOne,
-		Status:     200,
+		Status:     http.StatusOK,
 		Size:       uint64(len("finalHandler")),
 		Values: map[interface{}]interface{}{
 			1: "one",
@@ -35,7 +35,6 @@ func TestMiddleware(t *testing.T) {
 		//notice that we are testing WithValue() here as well.
 		WithValue(r, 1, "one")
 
-		w.WriteHeader(200)
 		fmt.Fprint(w, "finalHandler")
 	})
 
