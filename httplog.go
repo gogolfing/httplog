@@ -41,6 +41,11 @@ func Middleware(logger Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r.WithContext(ctx))
 
 		rw.Done = now()
+
+		if rw.Status == 0 {
+			rw.Status = http.StatusOK
+		}
+
 		logger.AfterServeHTTP(rw)
 	}
 	return http.HandlerFunc(f)
