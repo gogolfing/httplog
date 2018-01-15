@@ -63,11 +63,14 @@ func newContextWithResponseWriter(ctx context.Context, rw *ResponseWriter) conte
 //on the ResponseWriter for processing after a Request has been served.
 func WithValue(r *http.Request, key, value interface{}) {
 	rw := responseWriterFromContext(r.Context())
-	rw.putValue(key, value)
+	if rw != nil {
+		rw.putValue(key, value)
+	}
 }
 
 func responseWriterFromContext(ctx context.Context) *ResponseWriter {
-	return ctx.Value(responseWriterKey).(*ResponseWriter)
+	v, _ := ctx.Value(responseWriterKey).(*ResponseWriter)
+	return v
 }
 
 //ResponseWriter is an http.ResponseWriter implementation that records status,
