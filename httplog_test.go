@@ -19,8 +19,11 @@ func TestMiddleware_SetStatus(t *testing.T) {
 		return TimeOne
 	}
 
+	r := httptest.NewRequest("", "https://www.example.com/path", nil)
+
 	logger := &MockLogger{
 		t:          t,
+		Request:    r,
 		RequestURI: "/path",
 		Start:      TimeOne,
 		Done:       TimeOne,
@@ -41,7 +44,6 @@ func TestMiddleware_SetStatus(t *testing.T) {
 	handler := Middleware(logger, finalHandler)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("", "https://www.example.com/path", nil)
 	handler.ServeHTTP(w, r)
 
 	logger.AssertCalled()

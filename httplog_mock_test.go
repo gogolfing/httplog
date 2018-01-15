@@ -26,6 +26,8 @@ func (w *MockHTTPResponseWriter) Header() http.Header {
 type MockLogger struct {
 	t *testing.T
 
+	Request *http.Request
+
 	Called bool
 
 	RequestURI string
@@ -46,6 +48,9 @@ func (l *MockLogger) AfterServeHTTP(rw *ResponseWriter) {
 
 	l.Called = true
 
+	if rw.Request != l.Request {
+		l.t.Errorf("%v != %v", rw.Request, l.Request)
+	}
 	if rw.RequestURI != l.RequestURI {
 		l.t.Errorf("%v != %v", rw.RequestURI, l.RequestURI)
 	}
