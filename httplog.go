@@ -32,6 +32,7 @@ func Middleware(logger Logger, next http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		rw := &ResponseWriter{
 			ResponseWriter: w,
+			Request:        r,
 			RequestURI:     r.URL.RequestURI(),
 			Start:          now(),
 			Done:           now(),
@@ -78,6 +79,9 @@ func responseWriterFromContext(ctx context.Context) *ResponseWriter {
 type ResponseWriter struct {
 	//ResponseWriter is the promoted http.ResponseWriter implementation.
 	http.ResponseWriter
+
+	//Request is the Request that the Handler is serving.
+	Request *http.Request
 
 	//RequestURI is set before next.ServeHTTP() in Middleware() so that the full
 	//URL is recorded before downstream http.Handlers possibly modify the Request URL.
