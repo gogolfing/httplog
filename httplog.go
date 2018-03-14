@@ -3,10 +3,16 @@
 package httplog
 
 import (
+	"bufio"
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 )
+
+//ErrResponseWriterIsNotAHijacker indicates a ResponseWriter's underlying ResponseWriter is not a Hijacker.
+var ErrResponseWriterIsNotAHijacker = errors.New("httplog: underlying ResponseWriter is not an http.Hijacker")
 
 type key int
 
@@ -83,6 +89,8 @@ type ResponseWriter struct {
 	//ResponseWriter is the promoted http.ResponseWriter implementation.
 	http.ResponseWriter
 
+	hijacked bool
+
 	//Request is the Request that the Handler is serving.
 	Request *http.Request
 
@@ -107,6 +115,10 @@ type ResponseWriter struct {
 //Write is the http.ResponseWriter implementation of Write that records the number
 //bytes written and passes p along to r.ResponseWriter.
 func (r *ResponseWriter) Write(p []byte) (n int, err error) {
+	if r.hijacked {
+		return 0, nil
+	}
+
 	size, err := r.ResponseWriter.Write(p)
 	r.Size += uint64(size)
 	return size, err
@@ -115,8 +127,23 @@ func (r *ResponseWriter) Write(p []byte) (n int, err error) {
 //WriteHeader is the http.ResponseWriter implementation of WriteHeader that records
 //status and passes status along to r.ResponseWriter.
 func (r *ResponseWriter) WriteHeader(status int) {
+	if r.hijacked {
+		return
+	}
+
 	r.Status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+//Hijack is the http.Hijacker implementation.
+//It returns r.ResponseWriter.Hijack() is r.ResponseWriter is a Hijacker.
+//Otherwise ErrResponseWriterIsNotAHijacker is returned.
+func (r *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		r.hijacked = true
+		return h.Hijack()
+	}
+	return nil, nil, ErrResponseWriterIsNotAHijacker
 }
 
 //Duration returns the length of time that all downstream http.Handlers took to

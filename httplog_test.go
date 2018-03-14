@@ -79,6 +79,11 @@ func TestResponseWriter_WriteHeader(t *testing.T) {
 	}
 }
 
+func TestReponseWriter_IsAHijacker(t *testing.T) {
+	func(h http.Hijacker) {
+	}(&ResponseWriter{})
+}
+
 func TestResponseWriter_Duration(t *testing.T) {
 	start := time.Now()
 	done := start.Add(time.Duration(10))
